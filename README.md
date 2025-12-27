@@ -1,63 +1,134 @@
-# Aura Interactive Image Protocol (AIIP) - Prototype
+# AIIP - Annotated Interactive Image Protocol
 
-**Author:** aezi zhu (github.com/aezizhu)
+**Version 3.0**
 
-This repository contains the reference implementation and prototype for the Aura Interactive Image Protocol (AIIP). It includes a functional demonstration of the core protocol, allowing for the creation and viewing of self-contained, interactive PNG image files.
+A universal image format where all content is visible directly in the image.
 
-For the complete technical specification of the protocol, please see the [Aura Image Protocol Specification repository](https://github.com/aezizhu/Aura-Image-Protocol-Specification).
+## Overview
 
----
+AIIP files (`.aiip`) are PNG images with **all annotations rendered directly into the pixels**. They can be:
 
-## ✨ Core Concepts
+- **Opened with ANY image viewer** - Preview, Photos, GIMP, Photoshop, browsers, etc.
+- **Renamed to `.png`** if your OS doesn't recognize `.aiip` extension
+- **Shared anywhere** - Email, chat, websites - just like any image file
 
-AIIP is a protocol designed to embed rich, interactive experiences within a standard PNG file. It works by adding a custom `aura` data chunk that contains a secure, declarative JSON object defining interactive regions, events, and content.
+### Key Principle
 
--   **Self-Contained:** All interactivity is packed into a single `.png` file.
--   **Backward Compatible:** Images gracefully degrade to standard static PNGs in non-compatible viewers.
--   **Secure by Design:** The protocol uses a declarative JSON structure, not executable code, to prevent security risks.
+**No special viewer needed.** Open the file, see everything.
 
-## 🚀 Running the Prototype
+The structured data is also embedded as a custom PNG chunk for programmatic access.
 
-This project was built with Vite, React, and TypeScript.
-
-### 1. Prerequisites
-
--   [Node.js](https://nodejs.org/) (version 18.x or higher)
--   [npm](https://www.npmjs.com/)
-
-### 2. Installation
-
-Clone the repository and install the dependencies:
+## Quick Start
 
 ```bash
-npm install
+# Install Pillow
+pip install Pillow
+
+# Create a sample AIIP file
+python create-aiip.py
+
+# Open it (rename to .png if needed on your system)
+open sample.aiip    # macOS - may need: open sample.png
 ```
 
-### 3. Running the Development Server
+## Usage
 
-To run the demo application locally:
+### Creating an AIIP Image
+
+Edit `create-aiip.py` to customize:
+
+```python
+# Your data
+DATA = {
+    "title": "Your Title",
+    "regions": [
+        {
+            "name": "Region 1",
+            "info": "Details here",
+            "bounds": (x1, y1, x2, y2)
+        }
+    ]
+}
+```
+
+Run the script:
 
 ```bash
-npm run dev
+python create-aiip.py
 ```
 
-This will start a development server, typically at `http://localhost:5173`.
+Output: `sample.aiip` - a PNG file with all content visible.
 
-## 🔬 How the Demo Works
+### Programmatic Access
 
-The application demonstrates the full, end-to-end workflow of the protocol:
+The structured data is embedded in the PNG as a custom `aiip` chunk:
 
-1.  **Creator Demo:** Click the **"Generate & Download"** button. This uses the `aura-creator` logic to take a sample image and a sample JSON object, compress the JSON, and inject it into a new PNG file (`interactive-map.png`) that is downloaded to your computer.
+```python
+import zlib
+import json
 
-2.  **Viewer Demo:** Click the **"Choose File"** button and select the `interactive-map.png` you just downloaded. The application uses the `aura-parser` to extract the `aura` chunk, decompress the data, and render the interactive regions on the image using the `AuraViewer` React component.
+def read_aiip_data(filepath):
+    with open(filepath, 'rb') as f:
+        data = f.read()
 
-## 📂 Project Structure
+    # Skip PNG signature (8 bytes)
+    pos = 8
 
--   `src/components/AuraViewer/`: Contains the React component responsible for rendering the interactive experience.
--   `src/lib/aura-parser/`: Contains the logic for parsing the `aura` chunk from a PNG file.
--   `src/lib/aura-creator/`: Contains the logic for creating an AIIP file by injecting the `aura` chunk.
--   `src/assets/`: Contains the sample data used for the demonstration.
+    while pos < len(data):
+        length = int.from_bytes(data[pos:pos+4], 'big')
+        chunk_type = data[pos+4:pos+8].decode('ascii')
 
-## 📜 License
+        if chunk_type == 'aiip':
+            chunk_data = data[pos+8:pos+8+length]
+            # Skip compression byte, decompress rest
+            json_str = zlib.decompress(chunk_data[1:]).decode('utf-8')
+            return json.loads(json_str)
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+        pos += 12 + length  # length(4) + type(4) + data + crc(4)
+
+    return None
+
+# Usage
+data = read_aiip_data('sample.aiip')
+print(data['meta']['title'])
+```
+
+## File Format
+
+AIIP files are standard PNG files with:
+
+1. **Visual content** - All annotations rendered into pixels
+2. **Embedded data** - Structured JSON in custom `aiip` chunk
+
+```
+[PNG Signature]
+[IHDR chunk]
+[aiip chunk]    <- Custom chunk with compressed JSON
+[IDAT chunks]   <- Image pixels with visible annotations
+[IEND chunk]
+```
+
+### Compression
+
+- Byte 0: `0x01` (DEFLATE compression)
+- Bytes 1-N: Compressed JSON data
+
+## Example Output
+
+The generated `sample.aiip` displays:
+
+- Title at top
+- Color-coded regions with borders
+- Labels and data inside each region
+- Legend at bottom
+- Footer with protocol info
+
+All visible when opened with any image viewer.
+
+## Author
+
+**aezi zhu** - [github.com/aezizhu](https://github.com/aezizhu)
+
+## License
+
+MIT License - See [LICENSE](LICENSE) file.
